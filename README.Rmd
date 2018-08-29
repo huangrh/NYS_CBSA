@@ -1,0 +1,330 @@
+---
+title: " "
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "README_figs/README-",
+  message = FALSE,
+  warning = FALSE)
+
+library(tidyverse)
+library(tigris)
+library(sf)
+library(readxl)
+library(viridis)
+library(psych)
+library(tidycensus)
+
+Sys.getenv("CENSUS_API_KEY")
+
+### Deprivation variables 
+vars <- c("B17001_002", "B17001_001", "B06009_002" , "B06009_001",
+          "B09008_011", "B09008_001","B08124_002", "B08124_001", "B25014_005", 
+          "B25014_006",  "B25014_007","B25014_011", "B25014_012", "B25014_013",  
+          "B25014_001", "B19058_002", "B19058_001","C23002C_021", "C23002D_008", 
+          "C23002C_017", "C23002D_003","B19001_002", "B19001_003", "B19001_004", 
+          "B19001_005", "B19001_006", "B19001_001")
+
+
+### get estimates for all US 
+acs_us <- get_acs(geography = "tract",state = "NY", variables = vars,
+                  output = "wide") %>%
+  mutate(pct_poverty = B17001_002E/B17001_001E,
+         pct_noHS = B06009_002E / B06009_001E,
+         pct_FHH = B09008_011E / B09008_001E,
+         pct_mgmt = B08124_002E /  B08124_001E, 
+         pct_crowd =  (B25014_005E +B25014_006E+ B25014_007E + 
+                         B25014_011E + B25014_012E + B25014_013E) / B25014_001E,
+         pct_pubassist = B19058_002E/B19058_001E,
+         pct_unempl = (C23002C_021E + C23002D_008E)  / (C23002C_017E + C23002D_003E),
+         pct_under30K =( B19001_002E+B19001_003E+B19001_004E+B19001_005E +
+                           B19001_006E) / B19001_001E)
+
+## select transformed variables
+values  <-  acs_us %>% select(pct_poverty,pct_noHS,pct_FHH,pct_mgmt,pct_crowd,
+                              pct_pubassist, pct_unempl,pct_under30K) %>% as.matrix()
+values[is.nan(values)] <- 0
+## PCA
+ND <- principal(values,nfactors = 1)          
+NDI_us <- cbind(acs_us,ND$scores) 
+
+## 
+NDI_us <- NDI_us %>% select(NAME,GEOID,PC1) %>% 
+  separate(NAME, into = c( "Tract","County","State"), sep = ",")
+
+
+### counties sf
+NY_counties <- get_acs(geography = "tract",state = "NY", variables = c("B01001_001"), 
+                       output = "wide", geometry = TRUE)
+
+### merged NDI sf
+MapNY <- geo_join(NY_counties,NDI_us, by_sp = "GEOID", by_df = "GEOID")
+
+
+### state sf
+NY_st<- get_acs(geography = "state",state = "NY", variables = c("B01001_001"), 
+                       output = "wide", geometry = TRUE)
+metro <- core_based_statistical_areas(cb=TRUE)
+
+NYS <- st_as_sf(metro) %>% separate(NAME, into = c("CBSA","State"), sep = ",") %>%
+  filter(State == " NY") 
+
+CSA <-  NYS %>% filter(CSAFP > 0)
+
+
+#######
+CSA2 <- st_join(MapNY, CSA, join = st_within, 
+                   left = FALSE) 
+
+##### city halls
+
+hall <- read_excel("halls.xlsx", col_types = c("numeric", 
+                                               "numeric", "text", "text", "text"))%>%
+  st_as_sf(coords = c("X","Y"), crs = 4269)
+
+### distance from tract centroid
+
+dist <- map(c("45060" ,"40380", "36460" ,"28740", "24020" ,"15380", "15380", "12180" ,
+  "11220","24100" ,"42900" ,"12860" ,"10580", "10580", "10580", "18500",
+  "27060", "18660", "21300" ,"26460"), function (x){
+    ct <- CSA2 %>%
+      filter(CBSAFP == x)
+    halls <- filter(hall, CBSAFP == x)
+    dist <- st_distance(
+      st_centroid(ct), halls
+    )
+    mindist <- apply(dist, 1, min)
+    out <- mutate(ct, dist = mindist)
+    return(out)
+  }) %>%
+  reduce(rbind) %>%
+  distinct()
+
+## from hrbrthemes 
+theme_ipsum <- function(base_family="Arial Narrow", base_size = 11.5,
+                        plot_title_family=base_family, plot_title_size = 15,
+                        plot_title_face="bold", plot_title_margin = 10,
+                        subtitle_family=base_family, subtitle_size = 11,
+                        subtitle_face = "plain", subtitle_margin = 15,
+                        strip_text_family = base_family, strip_text_size = 12,
+                        strip_text_face = "plain",
+                        caption_family = base_family, caption_size = 9,
+                        caption_face = "italic", caption_margin = 10,
+                        axis_text_size = 9,
+                        axis_title_family = subtitle_family, axis_title_size = 10.5,
+                        axis_title_face = "plain", axis_title_just = "rt",
+                        plot_margin = margin(15, 15, 15, 15),
+                        grid_col = "#cccccc", grid = TRUE,
+                        axis_col = "#cccccc", axis = FALSE, ticks = FALSE) {
+  
+  ret <- ggplot2::theme_minimal(base_family=base_family, base_size=base_size)
+  
+  ret <- ret + theme(legend.background=element_blank())
+  ret <- ret + theme(legend.key=element_blank())
+  
+  if (inherits(grid, "character") | grid == TRUE) {
+    
+    ret <- ret + theme(panel.grid=element_line(color=grid_col, size=0.2))
+    ret <- ret + theme(panel.grid.major=element_line(color=grid_col, size=0.2))
+    ret <- ret + theme(panel.grid.minor=element_line(color=grid_col, size=0.15))
+    
+    if (inherits(grid, "character")) {
+      if (regexpr("X", grid)[1] < 0) ret <- ret + theme(panel.grid.major.x=element_blank())
+      if (regexpr("Y", grid)[1] < 0) ret <- ret + theme(panel.grid.major.y=element_blank())
+      if (regexpr("x", grid)[1] < 0) ret <- ret + theme(panel.grid.minor.x=element_blank())
+      if (regexpr("y", grid)[1] < 0) ret <- ret + theme(panel.grid.minor.y=element_blank())
+    }
+    
+  } else {
+    ret <- ret + theme(panel.grid=element_blank())
+  }
+  
+  if (inherits(axis, "character") | axis == TRUE) {
+    ret <- ret + theme(axis.line=element_line(color="#2b2b2b", size=0.15))
+    if (inherits(axis, "character")) {
+      axis <- tolower(axis)
+      if (regexpr("x", axis)[1] < 0) {
+        ret <- ret + theme(axis.line.x=element_blank())
+      } else {
+        ret <- ret + theme(axis.line.x=element_line(color=axis_col, size=0.15))
+      }
+      if (regexpr("y", axis)[1] < 0) {
+        ret <- ret + theme(axis.line.y=element_blank())
+      } else {
+        ret <- ret + theme(axis.line.y=element_line(color=axis_col, size=0.15))
+      }
+    } else {
+      ret <- ret + theme(axis.line.x=element_line(color=axis_col, size=0.15))
+      ret <- ret + theme(axis.line.y=element_line(color=axis_col, size=0.15))
+    }
+  } else {
+    ret <- ret + theme(axis.line=element_blank())
+  }
+  
+  if (!ticks) {
+    ret <- ret + theme(axis.ticks = element_blank())
+    ret <- ret + theme(axis.ticks.x = element_blank())
+    ret <- ret + theme(axis.ticks.y = element_blank())
+  } else {
+    ret <- ret + theme(axis.ticks = element_line(size=0.15))
+    ret <- ret + theme(axis.ticks.x = element_line(size=0.15))
+    ret <- ret + theme(axis.ticks.y = element_line(size=0.15))
+    ret <- ret + theme(axis.ticks.length = grid::unit(5, "pt"))
+  }
+  
+  xj <- switch(tolower(substr(axis_title_just, 1, 1)), b=0, l=0, m=0.5, c=0.5, r=1, t=1)
+  yj <- switch(tolower(substr(axis_title_just, 2, 2)), b=0, l=0, m=0.5, c=0.5, r=1, t=1)
+  
+  ret <- ret + theme(axis.text.x=element_text(size=axis_text_size, margin=margin(t=0)))
+  ret <- ret + theme(axis.text.y=element_text(size=axis_text_size, margin=margin(r=0)))
+  ret <- ret + theme(axis.title=element_text(size=axis_title_size, family=axis_title_family))
+  ret <- ret + theme(axis.title.x=element_text(hjust=xj, size=axis_title_size,
+                                               family=axis_title_family, face=axis_title_face))
+  ret <- ret + theme(axis.title.y=element_text(hjust=yj, size=axis_title_size,
+                                               family=axis_title_family, face=axis_title_face))
+  ret <- ret + theme(axis.title.y.right=element_text(hjust=yj, size=axis_title_size, angle=90,
+                                                     family=axis_title_family, face=axis_title_face))
+  ret <- ret + theme(strip.text=element_text(hjust=0, size=strip_text_size,
+                                             face=strip_text_face, family=strip_text_family))
+  ret <- ret + theme(panel.spacing=grid::unit(2, "lines"))
+  ret <- ret + theme(plot.title=element_text(hjust=0, size=plot_title_size,
+                                             margin=margin(b=plot_title_margin),
+                                             family=plot_title_family, face=plot_title_face))
+  ret <- ret + theme(plot.subtitle=element_text(hjust=0, size=subtitle_size,
+                                                margin=margin(b=subtitle_margin),
+                                                family=subtitle_family, face=subtitle_face))
+  ret <- ret + theme(plot.caption=element_text(hjust=1, size=caption_size,
+                                               margin=margin(t=caption_margin),
+                                               family=caption_family, face=caption_face))
+  ret <- ret + theme(plot.margin=plot_margin)
+  
+  ret
+  
+}
+
+#' Update matching font defaults for text geoms
+#'
+#' Updates [ggplot2::geom_label] and [ggplot2::geom_text] font defaults
+#'
+#' @param family,face,size,color font family name, face, size and color
+#' @export
+update_geom_font_defaults <- function(family="Arial Narrow", face="plain", size=3.5,
+                                      color = "#2b2b2b") {
+  update_geom_defaults("text", list(family=family, face=face, size=size, color=color))
+  update_geom_defaults("label", list(family=family, face=face, size=size, color=color))
+}
+
+#' @rdname ArialNarrow
+#' @md
+#' @title Arial Narrow font name R variable aliases
+#' @description `font_an` == "`Arial Narrow`"
+#' @format length 1 character vector
+#' @export
+font_an <- "Arial Narrow"
+
+
+```
+
+## Distance profile of NDI from urban centers
+
+
+##  Plots
+
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+### CBSA NDI
+ggplot() + 
+  geom_sf(data = CSA2,aes(fill = PC1, color = PC1)) +
+  geom_sf(data = NY_st, fill = NA) +
+  geom_sf(data = CSA, fill = NA, color = "#ffffff",  size = .5) +
+  scale_fill_viridis_c(option = "inferno") + 
+  scale_color_viridis_c(option = "inferno") + theme_minimal() +
+  theme(axis.text = element_blank()) + 
+  labs(fill = "", color = "",
+       caption = "Higher index scores represent higher tract-level deprivation \nrelative to all census-tracts in NYS.") +
+  ggtitle("New York's Core-based Statistical Areas", 
+          subtitle = "excluding Tri-State Area")
+
+```
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+dist %>% 
+ggplot(aes(x =dist/1000, y = PC1)) +
+  geom_smooth(aes(color = CBSA), se = FALSE) +
+  geom_hline(yintercept = 0, lty = 1) +
+  scale_color_viridis_d() +
+ ggtitle("Neighborhood deprivation decreases \nwith distance from urban center")+
+  labs(x = "Distance from Principal City Hall (km)", 
+       y = "Deprivation Index") +
+  theme_ipsum()
+
+```
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+
+dist %>% filter(CBSA %in% c("Albany-Schenectady-Troy", "Syracuse", "Buffalo-Cheektowaga-Niagara Falls",
+                "Rochester")) %>%
+  ggplot(aes(x =dist/1000, y = PC1)) + geom_point() +
+  geom_smooth(se = FALSE) +
+  theme_minimal() + geom_hline(yintercept = 0, lty = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  facet_wrap(.~CBSA, nrow = 2)
+
+```
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+## plot function 
+plot <- function(x) {dist %>% filter(CBSA == x) %>%
+  ggplot(aes(x =dist/1000, y = PC1)) + geom_point(aes(color = County)) +
+  geom_smooth() +
+  geom_hline(yintercept = 0, lty = 2) +
+  scale_color_viridis_d(option = "plasma") +
+    ggtitle("Neighborhood deprivation decreases \nwith distance from urban center" ,
+            subtitle = paste(x, "Core-based Statistical Area")) +
+    labs(x = "Distance from Principal City Hall (km)", 
+         y = "Deprivation Index")}
+
+
+plot("Syracuse") +  theme_ipsum()
+plot("Buffalo-Cheektowaga-Niagara Falls") + theme_ipsum()
+plot("Albany-Schenectady-Troy") + theme_ipsum() 
+plot("Rochester") + theme_ipsum()
+
+```
+
+
+```{r, echo=FALSE}
+### function for loess - all areas
+
+areas <- unique(dist$CBSA)[1:17]
+
+resdf <- map(areas, function(x){
+  dat <- dist %>% filter(CBSA == x)
+  reg <- loess(PC1~dist, data = dat, span = .5)
+  res <- abs(reg$residuals)
+  out <- cbind(dat,res)
+  return(out)
+}) %>%
+  reduce(rbind)
+
+```
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+
+ggplot() +  geom_sf(data =NY_st, fill = "#e5e5e5") +
+  geom_sf(data = resdf, aes(fill = res, color = res)) +
+  geom_sf(data = CSA, fill = NA, color  = "#7f7f7f") +
+  scale_fill_viridis_c() +
+  scale_color_viridis_c() +
+  theme_minimal() + theme(axis.text = element_blank()) +
+  labs(fill = "", color = "") +
+  ggtitle("Residuals Map", subtitle = "absolute values of LOESS model residuals") 
+
+```
+
+
+``` {r, echo = FALSE}
+knitr::write_bib(.packages(), "packages.bib") 
+```
