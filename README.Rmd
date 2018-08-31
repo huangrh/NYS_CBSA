@@ -244,8 +244,8 @@ ggplot() +
   theme(axis.text = element_blank()) + 
   labs(fill = "", color = "",
        caption = "Higher index scores represent higher tract-level deprivation \nrelative to all census-tracts in NYS.") +
-  ggtitle("New York's Core-based Statistical Areas", 
-          subtitle = "excluding Tri-State Area")
+  ggtitle("Deprivation in NYS", 
+          subtitle = "select core-based statistical areas")
 
 ```
 
