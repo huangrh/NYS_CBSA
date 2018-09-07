@@ -16,6 +16,9 @@ library(readxl)
 library(viridis)
 library(psych)
 library(tidycensus)
+library(gtools)
+library(gridExtra)
+library(gtable)
 
 Sys.getenv("CENSUS_API_KEY")
 
@@ -321,6 +324,47 @@ ggplot() +  geom_sf(data =NY_st, fill = "#e5e5e5") +
   theme_minimal() + theme(axis.text = element_blank()) +
   labs(fill = "", color = "") +
   ggtitle("Residuals Map", subtitle = "absolute values of LOESS model residuals") 
+
+```
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+
+#### Core / Comm Counties boxplot ######
+
+dist %>% filter(CBSA %in% c("Albany-Schenectady-Troy", "Syracuse", "Buffalo-Cheektowaga-Niagara Falls",
+                            "Rochester")) %>% 
+  mutate(quant = quantcut(PC1, q=4),
+         Type = ifelse(County %in% c(" Monroe County"," Onondaga County",
+                                     " Albany County"," Schenectady County"," Rensselaer County",
+                                     " Erie County", " Niagara County"), "Core County", "Commuting County")) %>% 
+  ggplot(aes(quant,dist/1000)) + geom_boxplot(aes(color = Type)) +
+  scale_x_discrete(labels = c("Least Deprived", "", "", "Most Deprived")) +
+  labs(color = "", x = "", y = "Distance from Prinicpal City Hall (km)") + theme_classic() + theme(axis.text = element_text(color = "black")) +
+  scale_color_viridis_d(option = "viridis")
+```
+
+
+```{r, echo=FALSE,fig.height= 8, fig.width=10}
+## plot function 
+plot2 <- function(x) {dist %>% filter(CBSA == x) %>%
+    ggplot(aes(x =dist/1000, y = PC1)) + geom_point(aes(color = County)) +
+    geom_smooth() +
+    geom_hline(yintercept = 0, lty = 2) +
+    scale_color_viridis_d(option = "plasma") +
+    ggtitle("" ,
+            subtitle = paste(x, "CBSA")) +
+    labs(x = "", 
+         y = "")}
+
+a <- plot("Syracuse") + theme_ipsum()
+b  <- plot("Buffalo-Cheektowaga-Niagara Falls") + theme_ipsum()
+c <- plot("Albany-Schenectady-Troy") + theme_ipsum() 
+d <- plot("Rochester") + theme_ipsum()
+
+
+grid.arrange(a,b,c,d, ncol = 2,
+             left = "Desprivation Index Score",
+             bottom = "Distance from Principal City Hall (km)")
 
 ```
 

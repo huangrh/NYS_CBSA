@@ -14,3 +14,7 @@ Plots
 ![](README_figs/README-unnamed-chunk-4-1.png)![](README_figs/README-unnamed-chunk-4-2.png)![](README_figs/README-unnamed-chunk-4-3.png)![](README_figs/README-unnamed-chunk-4-4.png)
 
 ![](README_figs/README-unnamed-chunk-6-1.png)
+
+![](README_figs/README-unnamed-chunk-7-1.png)
+![](README_figs/README-unnamed-chunk-8-1.png)
+
