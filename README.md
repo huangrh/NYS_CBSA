@@ -17,4 +17,3 @@ Plots
 
 ![](README_figs/README-unnamed-chunk-7-1.png)
 ![](README_figs/README-unnamed-chunk-8-1.png)
-
