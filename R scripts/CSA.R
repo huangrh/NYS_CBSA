@@ -30,8 +30,8 @@ ggplot() +
 
 ##### city halls
 
-hall <- read_excel("halls.xlsx", col_types = c("numeric", 
-                                               "numeric", "text", "text", "text"))%>%
+hall <- read_excel("~/Desktop/DataProjects/NYS_CBSA/halls.xlsx", col_types = c("numeric", 
+                                               "numeric", "text", "text", "text")) %>%
   st_as_sf(coords = c("X","Y"), crs = 4269)
 
 ### distance from tract centroid
