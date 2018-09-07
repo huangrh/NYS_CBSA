@@ -71,7 +71,6 @@ dist %>% filter(CBSA %in% c("Albany-Schenectady-Troy", "Syracuse", "Buffalo-Chee
   ggplot(aes(x =dist/1000, y = PC1)) + geom_point() +
   geom_smooth(se = FALSE) +
   theme_minimal() + geom_hline(yintercept = 0, lty = 2) +
-  scale_color_viridis_d(option = "plasma") +
   facet_wrap(.~CBSA, nrow = 2)
 
 ### color counties
