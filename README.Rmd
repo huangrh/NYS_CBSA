@@ -356,10 +356,10 @@ plot2 <- function(x) {dist %>% filter(CBSA == x) %>%
     labs(x = "", 
          y = "")}
 
-a <- plot("Syracuse") + theme_ipsum()
-b  <- plot("Buffalo-Cheektowaga-Niagara Falls") + theme_ipsum()
-c <- plot("Albany-Schenectady-Troy") + theme_ipsum() 
-d <- plot("Rochester") + theme_ipsum()
+a <- plot2("Syracuse") + theme_ipsum()
+b  <- plot2("Buffalo-Cheektowaga-Niagara Falls") + theme_ipsum()
+c <- plot2("Albany-Schenectady-Troy") + theme_ipsum() 
+d <- plot2("Rochester") + theme_ipsum()
 
 
 grid.arrange(a,b,c,d, ncol = 2,
